@@ -1,0 +1,41 @@
+replicaCount: 3
+
+image:
+  repository: node-watchdog
+  tag: latest
+  pullPolicy: IfNotPresent
+
+amt:
+  username: "admin"
+  password: "CHANGEME"
+  port: 16992
+  annotation: "watchdog.example.com/amt-ip"
+
+config:
+  notReadyThreshold: "15m"
+  pollInterval: "30s"
+  cooldownPeriod: "1h"
+  maxConcurrentRestarts: "1"
+  dryRun: "true"
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limits:
+    memory: 128Mi
+
+tolerations:
+  - key: node.kubernetes.io/not-ready
+    operator: Exists
+    effect: NoExecute
+    tolerationSeconds: 300
+  - key: node.kubernetes.io/unreachable
+    operator: Exists
+    effect: NoExecute
+    tolerationSeconds: 300
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+
+preferControlPlaneNodes: true
