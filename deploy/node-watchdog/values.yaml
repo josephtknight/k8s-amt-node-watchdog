@@ -10,6 +10,9 @@ amt:
   password: "CHANGEME"
   port: 16992
   annotation: "watchdog.example.com/amt-ip"
+  # Use an existing Secret instead of creating one.
+  # The secret must contain AMT_USERNAME and AMT_PASSWORD keys.
+  existingSecret: ""
 
 config:
   notReadyThreshold: "15m"

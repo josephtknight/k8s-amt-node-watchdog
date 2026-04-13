@@ -47,7 +47,7 @@ spec:
             - configMapRef:
                 name: {{ include "node-watchdog.fullname" . }}-config
             - secretRef:
-                name: {{ include "node-watchdog.fullname" . }}-amt
+                name: {{ .Values.amt.existingSecret | default (printf "%s-amt" (include "node-watchdog.fullname" .)) }}
           env:
             - name: LEASE_NAME
               value: {{ include "node-watchdog.fullname" . }}
