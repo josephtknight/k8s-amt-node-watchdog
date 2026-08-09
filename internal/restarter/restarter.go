@@ -117,9 +117,11 @@ func (r *Restarter) MaybeRestart(ctx context.Context, node *corev1.Node, notRead
 	// 4. Control-plane quorum check
 	if isControlPlane(node) {
 		cpReady, cpTotal := r.controlPlaneHealth(ctx)
-		// Need majority of control-plane nodes to maintain etcd quorum
+		// cpReady reflects live NodeReady status, so it already excludes
+		// this node (it's NotReady — that's why we're here). Need the
+		// remaining ready control-plane nodes to hold a majority.
 		cpMajority := (cpTotal / 2) + 1
-		if cpReady-1 < cpMajority { // -1 because we'd be taking one down
+		if cpReady < cpMajority {
 			slog.Warn("skipping restart: would risk etcd quorum",
 				"node", name,
 				"cp_ready", cpReady,

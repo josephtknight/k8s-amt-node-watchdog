@@ -190,10 +190,12 @@ func TestMaybeRestart_PowerCycleFailure_NoCooldown(t *testing.T) {
 	}
 }
 
-func TestMaybeRestart_ControlPlaneQuorum(t *testing.T) {
+func TestMaybeRestart_ControlPlaneQuorum_SingleNodeDownAllowed(t *testing.T) {
 	cfg := baseCfg()
 
-	// 3 control-plane nodes: 2 ready, 1 not ready (the target)
+	// 3 control-plane nodes: 2 ready, 1 not ready (the target).
+	// The target being down doesn't reduce the other two ready nodes,
+	// which already hold majority (2 of 3) — restart should proceed.
 	target := controlPlaneNode("cp-1", "10.0.0.1")
 	cp2 := readyControlPlaneNode("cp-2", "10.0.0.2")
 	cp3 := readyControlPlaneNode("cp-3", "10.0.0.3")
@@ -202,8 +204,29 @@ func TestMaybeRestart_ControlPlaneQuorum(t *testing.T) {
 	recorder := record.NewFakeRecorder(10)
 	r := NewWithRecorder(cfg, clientset, cycler, recorder)
 
-	// With 2 ready out of 3, restarting would leave 1 ready < majority(2)
-	// So it should be blocked
+	err := r.MaybeRestart(context.Background(), target, time.Now().Add(-20*time.Minute))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cycler.calls) != 1 {
+		t.Error("should allow restart: remaining control-plane nodes already hold majority")
+	}
+}
+
+func TestMaybeRestart_ControlPlaneQuorum_TwoNodesDownBlocked(t *testing.T) {
+	cfg := baseCfg()
+
+	// 3 control-plane nodes: 2 already down (target + cp2), 1 ready.
+	// Only 1 of 3 ready is below majority(2) even excluding the target,
+	// so restarting would not help and should be blocked.
+	target := controlPlaneNode("cp-1", "10.0.0.1")
+	cp2 := controlPlaneNode("cp-2", "10.0.0.2")
+	cp3 := readyControlPlaneNode("cp-3", "10.0.0.3")
+	clientset := fake.NewSimpleClientset(target, cp2, cp3)
+	cycler := &mockCycler{}
+	recorder := record.NewFakeRecorder(10)
+	r := NewWithRecorder(cfg, clientset, cycler, recorder)
+
 	err := r.MaybeRestart(context.Background(), target, time.Now().Add(-20*time.Minute))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
