@@ -5,11 +5,19 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/icholy/digest"
 )
+
+// returnValueRe matches a SOAP ReturnValue element regardless of XML namespace
+// prefix. Real AMT firmware responses qualify the element with a namespace
+// prefix bound to the CIM_PowerManagementService schema (e.g. <g:ReturnValue>),
+// not the bare <ReturnValue> this used to look for -- which meant every real
+// response, success or failure, fell through to the error path.
+var returnValueRe = regexp.MustCompile(`<(?:[\w]+:)?ReturnValue>(\d+)</(?:[\w]+:)?ReturnValue>`)
 
 // PowerCycler is the interface for power-cycling a node via AMT.
 type PowerCycler interface {
@@ -66,15 +74,19 @@ func (c *Client) PowerCycle(ip string) error {
 		return fmt.Errorf("AMT returned HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Check for ReturnValue in the response.
-	// A ReturnValue of 0 means success.
+	// Check for ReturnValue in the response, tolerating any namespace prefix
+	// (see returnValueRe). A ReturnValue of 0 means success.
 	bodyStr := string(body)
-	if strings.Contains(bodyStr, "<ReturnValue>0</ReturnValue>") {
+	matches := returnValueRe.FindStringSubmatch(bodyStr)
+	if matches == nil {
+		return fmt.Errorf("AMT response missing ReturnValue, response: %s", bodyStr)
+	}
+	if matches[1] == "0" {
 		slog.Info("AMT power cycle command accepted", "ip", ip)
 		return nil
 	}
 
-	return fmt.Errorf("AMT power cycle failed, response: %s", bodyStr)
+	return fmt.Errorf("AMT power cycle failed, return value %s, response: %s", matches[1], bodyStr)
 }
 
 const powerCycleSOAP = `<?xml version="1.0" encoding="UTF-8"?>
